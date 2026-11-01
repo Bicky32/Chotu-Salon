@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -93,7 +93,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radiu
   <div class="clock" id="clock">--:-- --</div>
   <nav>
     <div>
-
+      <button class="pill glass" data-open="playlists">Playlists</button>
       <button class="pill glass" data-open="songs">Songs</button>
     </div>
   </nav>
@@ -116,22 +116,20 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radiu
   </div>
 </main>
 
-
+<div class="drawer glass" id="playlists"><h2>Playlists</h2></div>
 <div class="drawer glass" id="songs"><h2>Songs</h2></div>
 <div id="ytwrap" aria-hidden="true"><div id="yt"></div></div>
 <div class="toast glass" id="toast"></div>
 
 <script>
 const $=s=>document.querySelector(s);
-/* ===== Single playlist ===== */
-const PLAYLIST_ID='PLWCVFnUjTDJI',PLAYLIST_NAME='Chotu Salon Playlist';
-const FALLBACK_VIDEO='zpBYCiBYPRo';let usedFallback=false;
+/* ===== CONFIG: add more YouTube playlists here (just the list ID after "list=") ===== */
+const PLAYLISTS=[
+  /* Tries "id" first; if YouTube rejects it, tries each of "fallbacks", then the single "video". */
+  {name:"Chotu Salon Playlist",id:"PLWCVFnUjTDJI",fallbacks:["RDzpBYCiBYPRo"],video:"zpBYCiBYPRo"}
+];
 
-
-
-
-
-let yt=null,ready=false,unlockStamp=-1,playing=false,tracks=[],titles={},curIdx=0,poll;
+let yt=null,ready=false,unlockStamp=-1,playing=false,tracks=[],titles={},curIdx=0,curList=0,poll;
 const fmt=s=>{s=Math.max(0,Math.floor(s||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
 function clock(){$('#clock').textContent=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
 clock();setInterval(clock,10000);
@@ -141,10 +139,10 @@ function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');cl
 function setPlayIcon(p){playing=p;$('#app').classList.toggle('playing',p);
   $('#playIco').innerHTML=p?'<path d="M8 5v14M16 5v14" stroke-width="2.600"/>':'<path d="M8 5.500v13l11-6.500z"/>'}
 function trackName(i){return titles[tracks[i]]||('Track '+(i+1))}
-
 function renderSongs(){
-  $('#songs').innerHTML='<h2>'+PLAYLIST_NAME+'</h2>'+(tracks.length?tracks.map((id,i)=>`<button class="row${i===curIdx?' on':''}" data-i="${i}">${trackName(i).replace(/</g,'&lt;')}</button>`).join(''):'<p style="font-weight:400;opacity:.7;font-size:14px;padding:10px 12px">Loading playlist…</p>')}
-
+  $('#songs').innerHTML='<h2>Songs</h2>'+(tracks.length?tracks.map((id,i)=>`<button class="row${i===curIdx?' on':''}" data-i="${i}">${trackName(i).replace(/</g,'&lt;')}</button>`).join(''):'<h2 style="font-weight:400;opacity:.7;font-size:14px">Loading playlist…</h2>')}
+function renderPlaylists(){
+  $('#playlists').innerHTML='<h2>Playlists</h2>'+PLAYLISTS.map((p,i)=>`<button class="row${i===curList?' on':''}" data-p="${i}">${p.name}<small>${i===curList&&tracks.length?tracks.length+' songs':'YouTube'}</small></button>`).join('')}
 function renderNow(){
   if(!yt||!ready)return;
   try{const d=yt.getVideoData()||{};
@@ -154,9 +152,9 @@ function renderNow(){
 }
 function syncTracks(){
   if(!yt||!ready)return;
-  try{const l=usedFallback?null:yt.getPlaylist();if(l&&l.length&&l.join()!==tracks.join()){tracks=l;fetchTitles();}
+  try{const l=yt.getPlaylist();if(l&&l.length&&l.join()!==tracks.join()){tracks=l;fetchTitles();}
     const i=yt.getPlaylistIndex();if(i>=0)curIdx=i}catch(e){}
-  renderSongs();
+  renderSongs();renderPlaylists();
 }
 /* Try to get every song title up front (falls back to "Track n" if blocked) */
 async function fetchTitles(){
@@ -174,21 +172,26 @@ function tick(){
 
 /* ---------- YouTube IFrame API ---------- */
 function createPlayer(){
-  const vars={listType:'playlist',list:PLAYLIST_ID,autoplay:1,playsinline:1,controls:0,rel:0,modestbranding:1};
+  const vars={listType:'playlist',list:PLAYLISTS[0].id,playsinline:1,controls:0,rel:0,modestbranding:1};
   if(location.protocol.startsWith('http'))vars.origin=location.origin;
   yt=new YT.Player('yt',{width:200,height:200,playerVars:vars,events:{
     onReady(){ready=true;yt.setVolume(+$('#volume').value);try{yt.setLoop(true)}catch(e){}syncTracks();renderNow();poll=setInterval(tick,500);tryAutoplay()},
     onStateChange(e){
       const S=YT.PlayerState;
       if(e.data===S.PLAYING)setPlayIcon(true);
-      else if(e.data===S.PAUSED||e.data===S.CUED){setPlayIcon(false);if(e.data===S.CUED&&!window._userPaused){try{yt.playVideo()}catch(_){}}}
+      else if(e.data===S.PAUSED||e.data===S.CUED)setPlayIcon(false);
       else if(e.data===S.ENDED)setPlayIcon(false);
       syncTracks();renderNow();
     },
     onError(e){
       const c=e.data;
+      const pl=PLAYLISTS[curList];
+      if(!tracks.length&&pl&&c!==153&&location.protocol!=='file:'){
+        pl._fi=pl._fi||0;
+        if(pl.fallbacks&&pl._fi<pl.fallbacks.length){yt.loadPlaylist({listType:'playlist',list:pl.fallbacks[pl._fi++],index:0});try{yt.setLoop(true)}catch(_){}return}
+        if(pl.video&&!pl._vid){pl._vid=true;toast('Playlist couldn’t be embedded — playing the song instead');yt.loadVideoById(pl.video);return}
+      }
       if(location.protocol==='file:'||c===153)toast('YouTube blocks playback from a local file — open this page over http(s) (e.g. a hosted URL or localhost).');
-      else if((c===2||c===5||c===100)&&!usedFallback){usedFallback=true;tracks=[FALLBACK_VIDEO];curIdx=0;renderSongs();try{yt.loadVideoById(FALLBACK_VIDEO)}catch(_){}}
       else if(c===2||c===5)toast('This playlist couldn’t be loaded');
       else if(c===101||c===150||c===100){toast('That video can’t be embedded — skipping');setTimeout(()=>{try{yt.nextVideo()}catch(_){}},800)}
       else toast('Playback error ('+c+')');
@@ -219,8 +222,8 @@ $('#next').onclick=()=>{if(!need())return;yt.nextVideo()};
 $('#seek').oninput=e=>{if(!need())return;const d=yt.getDuration()||0;yt.seekTo(e.target.value/100*d,true)};
 $('#volume').oninput=e=>{if(ready)yt.setVolume(+e.target.value)};
 $('#songs').onclick=e=>{const r=e.target.closest('.row');if(r&&need()){curIdx=+r.dataset.i;yt.playVideoAt(curIdx);renderSongs()}};
-
-
+$('#playlists').onclick=e=>{const r=e.target.closest('.row');if(r&&need()){const p=PLAYLISTS[+r.dataset.p];curList=+r.dataset.p;tracks=[];curIdx=0;
+  toast('Playing “'+p.name+'”');window._userPaused=false;yt.loadPlaylist({listType:'playlist',list:p.id,index:0});try{yt.setLoop(true)}catch(_){}setTimeout(syncTracks,1500);renderSongs();renderPlaylists()}};
 document.querySelectorAll('[data-open]').forEach(b=>b.onclick=e=>{e.stopPropagation();const d=$('#'+b.dataset.open),was=d.classList.contains('open');document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('open'));if(!was)d.classList.add('open')});
 document.addEventListener('click',e=>{if(!e.target.closest('.drawer'))document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('open'))});
 
@@ -230,8 +233,8 @@ const inst=async()=>{if(dp){dp.prompt();dp=null}else toast('Open your browser me
 const _ni=$('#navInstall'),_ci=$('#cardInstall'),_x=$('#closeInstall');
 if(_ni)_ni.onclick=inst;if(_ci)_ci.onclick=inst;if(_x)_x.onclick=()=>{const c=$('#installCard');if(c)c.style.display='none'};
 
-
-$('#title').textContent='Loading playlist\u2026';$('#artist').textContent='Chotu Saloon radio';$('#time').textContent='0:00 / 0:00';
-renderSongs();
+$('#title').textContent='Loading playlist…';$('#artist').textContent='Chotu Saloon radio';$('#time').textContent='0:00 / 0:00';
+renderSongs();renderPlaylists();
+</script>
 </body>
 </html>
