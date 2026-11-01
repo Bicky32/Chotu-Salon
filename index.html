@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -130,7 +130,7 @@ const PLAYLISTS=[
   {name:"Nepali Collection",id:"PLXuVG9D9JQ8RAhpH2TyISgBgEmXONIhGY"}
 ];
 
-let yt=null,ready=false,playing=false,tracks=[],titles={},curIdx=0,curList=0,poll;
+let yt=null,ready=false,unlockStamp=-1,playing=false,tracks=[],titles={},curIdx=0,curList=0,poll;
 const fmt=s=>{s=Math.max(0,Math.floor(s||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
 function clock(){$('#clock').textContent=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
 clock();setInterval(clock,10000);
@@ -202,8 +202,7 @@ const isPlaying=()=>{try{return yt.getPlayerState()===YT.PlayerState.PLAYING}cat
 function tryAutoplay(){yt.playVideo()}
 function unlockAudio(e){
   if(!yt||!ready)return;
-  const control=e.target instanceof Element&&e.target.closest('#play, #prev, #next, #seek, #songs .row, #playlists .row');
-  if(!control&&!isPlaying()&&!window._userPaused)yt.playVideo();
+  if(!isPlaying()&&!window._userPaused){yt.playVideo();unlockStamp=e.timeStamp}   /* play button ignores this same click */
   document.removeEventListener('click',unlockAudio,true);
   document.removeEventListener('keydown',unlockAudio,true);
 }
@@ -212,14 +211,14 @@ document.addEventListener('keydown',unlockAudio,true);
 
 /* ---------- Controls ---------- */
 const need=()=>{if(!yt||!ready){toast('Player is still loading…');return false}return true};
-$('#play').onclick=()=>{if(!need())return;if(playing){window._userPaused=true;yt.pauseVideo()}else{window._userPaused=false;yt.playVideo()}};
+$('#play').onclick=e=>{if(!need())return;if(e.timeStamp===unlockStamp)return;if(playing){window._userPaused=true;yt.pauseVideo()}else{window._userPaused=false;yt.playVideo()}};
 $('#prev').onclick=()=>{if(!need())return;yt.previousVideo()};
 $('#next').onclick=()=>{if(!need())return;yt.nextVideo()};
 $('#seek').oninput=e=>{if(!need())return;const d=yt.getDuration()||0;yt.seekTo(e.target.value/100*d,true)};
 $('#volume').oninput=e=>{if(ready)yt.setVolume(+e.target.value)};
 $('#songs').onclick=e=>{const r=e.target.closest('.row');if(r&&need()){curIdx=+r.dataset.i;yt.playVideoAt(curIdx);renderSongs()}};
 $('#playlists').onclick=e=>{const r=e.target.closest('.row');if(r&&need()){const p=PLAYLISTS[+r.dataset.p];curList=+r.dataset.p;tracks=[];curIdx=0;
-  toast('Playing “'+p.name+'”');window._userPaused=false;yt.loadPlaylist({listType:'playlist',list:p.id,index:0});try{yt.setLoop(true)}catch(_){}setTimeout(syncTracks,1500);renderSongs();renderPlaylists()}};
+  toast('Playing “'+p.name+'”');window._userPaused=false;yt.loadPlaylist({listType:'playlist',list:p.id,index:0});setTimeout(()=>{try{yt.playVideo()}catch(_){}},300);try{yt.setLoop(true)}catch(_){}setTimeout(syncTracks,1500);renderSongs();renderPlaylists()}};
 document.querySelectorAll('[data-open]').forEach(b=>b.onclick=e=>{e.stopPropagation();const d=$('#'+b.dataset.open),was=d.classList.contains('open');document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('open'));if(!was)d.classList.add('open')});
 document.addEventListener('click',e=>{if(!e.target.closest('.drawer'))document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('open'))});
 
