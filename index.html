@@ -81,6 +81,8 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radiu
  .sub{letter-spacing:.3em;font-size:11px}
 }
 @media(prefers-reduced-motion:reduce){.cover{animation:none}}
+#ytwrap{position:fixed;left:0;bottom:0;width:200px;height:200px;opacity:.001;pointer-events:none;z-index:-1;overflow:hidden}
+#ytwrap iframe{width:200px;height:200px}
 </style>
 </head>
 <body>
@@ -91,13 +93,8 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radiu
   <div class="clock" id="clock">--:-- --</div>
   <nav>
     <div>
-      <a class="pill glass" href="https://open.spotify.com" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#1ed760"/><path d="M6 9.2c4-1.2 8.5-.9 12 1M6.8 12.4c3.3-.9 6.700-.6 9.600 1M7.600 15.400c2.600-.7 5.200-.4 7.500.8" stroke="#0b2a14" stroke-width="1.700" fill="none" stroke-linecap="round"/></svg>Spotify</a>
-      <a class="pill glass" href="https://music.youtube.com" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#e11d2e"/><circle cx="12" cy="12" r="6.500" fill="none" stroke="#fff" stroke-width="1.500"/><path d="M10.300 9v6l5-3z" fill="#fff"/></svg>YT Music</a>
-    </div>
-    <div>
       <button class="pill glass" data-open="playlists">Playlists</button>
       <button class="pill glass" data-open="songs">Songs</button>
-      <button class="pill glass" id="navInstall"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.500 10.500 12 15l4.500-4.500M5 19h14"/></svg>Install</button>
     </div>
   </nav>
 
@@ -117,41 +114,103 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radiu
     </div>
     <div class="vol"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f8efe2" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9zM16.500 9a4 4 0 0 1 0 6M19 6.500a8 8 0 0 1 0 11"/></svg><input type="range" id="volume" min="0" max="100" value="85" aria-label="Volume"></div>
   </div>
-  <p class="contact">contact: <a href="mailto:kumarsinghu0@gmail.com">kumarsinghu0@gmail.com</a></p>
 </main>
 
 <div class="drawer glass" id="playlists"><h2>Playlists</h2></div>
 <div class="drawer glass" id="songs"><h2>Songs</h2></div>
+<div id="ytwrap" aria-hidden="true"><div id="yt"></div></div>
 <div class="toast glass" id="toast"></div>
 
 <script>
 const $=s=>document.querySelector(s);
-const songs=[["Main Duniya Bhula Doon","5:16"],["Tere Bina Zindagi Se","4:42"],["Chura Liya Hai Tumne","4:18"],["Lag Ja Gale","4:30"],["Kuch Kuch Hota Hai","5:05"],["Tujhe Dekha To","4:48"],["Pehla Nasha","5:02"],["Dil Ka Haal Sune","4:25"]];
-const lists=[["Barber shop classics",songs.slice(0,4)],["Evening chai",songs.slice(4,8)],["Late night radio",songs.slice(2,7)]];
-const secs=t=>{const[a,b]=t.split(":");return +a*60+ +b};
-let cur=0,pos=0,playing=false,timer;
-function clock(){$('#clock').textContent=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}).replace(/^(\d):/,'$1:')}
+/* ===== CONFIG: add more YouTube playlists here (just the list ID after "list=") ===== */
+const PLAYLISTS=[{name:"Chotu Saloon Playlist",id:"PLGqUOt0CNckJib_vLMdgWzmIRd2X7dG5Z"}];
+
+let yt=null,ready=false,playing=false,tracks=[],titles={},curIdx=0,curList=0,poll;
+const fmt=s=>{s=Math.max(0,Math.floor(s||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+function clock(){$('#clock').textContent=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
 clock();setInterval(clock,10000);
-function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600)}
-function render(){const[n,d]=songs[cur];$('#title').textContent=n;$('#cover').textContent=n.split(' ').slice(0,2).map(w=>w[0]).join('');
- const L=secs(d);$('#seek').value=pos/L*100;const f=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');$('#time').textContent=f(pos)+' / '+d;
- document.querySelectorAll('#songs .row').forEach((r,i)=>r.classList.toggle('on',i===cur))}
-function go(i){cur=(i+songs.length)%songs.length;pos=0;render()}
-function toggle(){playing=!playing;$('#app').classList.toggle('playing',playing);
- $('#playIco').innerHTML=playing?'<path d="M8 5v14M16 5v14" stroke-width="2.600"/>':'<path d="M8 5.500v13l11-6.500z"/>';
- clearInterval(timer);if(playing)timer=setInterval(()=>{pos++;if(pos>=secs(songs[cur][1]))go(cur+1);else render()},1000)}
-$('#play').onclick=toggle;$('#prev').onclick=()=>go(cur-1);$('#next').onclick=()=>go(cur+1);
-$('#seek').oninput=e=>{pos=e.target.value/100*secs(songs[cur][1]);render()};
-$('#songs').insertAdjacentHTML('beforeend',songs.map(([n,d],i)=>`<button class="row" data-i="${i}">${n}<small>${d}</small></button>`).join(''));
-$('#playlists').insertAdjacentHTML('beforeend',lists.map(([n,l],i)=>`<button class="row" data-p="${i}">${n}<small>${l.length} songs</small></button>`).join(''));
-$('#songs').onclick=e=>{const r=e.target.closest('.row');if(r){go(+r.dataset.i);if(!playing)toggle()}};
-$('#playlists').onclick=e=>{const r=e.target.closest('.row');if(r){const l=lists[+r.dataset.p];toast('Playing “'+l[0]+'”');const i=songs.findIndex(s=>s[0]===l[1][0][0]);go(i);if(!playing)toggle()}};
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),3200)}
+
+/* ---------- UI helpers ---------- */
+function setPlayIcon(p){playing=p;$('#app').classList.toggle('playing',p);
+  $('#playIco').innerHTML=p?'<path d="M8 5v14M16 5v14" stroke-width="2.600"/>':'<path d="M8 5.500v13l11-6.500z"/>'}
+function trackName(i){return titles[tracks[i]]||('Track '+(i+1))}
+function renderSongs(){
+  $('#songs').innerHTML='<h2>Songs</h2>'+(tracks.length?tracks.map((id,i)=>`<button class="row${i===curIdx?' on':''}" data-i="${i}">${trackName(i).replace(/</g,'&lt;')}</button>`).join(''):'<h2 style="font-weight:400;opacity:.7;font-size:14px">Loading playlist…</h2>')}
+function renderPlaylists(){
+  $('#playlists').innerHTML='<h2>Playlists</h2>'+PLAYLISTS.map((p,i)=>`<button class="row${i===curList?' on':''}" data-p="${i}">${p.name}<small>${i===curList&&tracks.length?tracks.length+' songs':'YouTube'}</small></button>`).join('')}
+function renderNow(){
+  if(!yt||!ready)return;
+  try{const d=yt.getVideoData()||{};
+    if(d.video_id&&d.title){titles[d.video_id]=d.title;$('#title').textContent=d.title;
+      $('#cover').textContent=d.title.split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'CS'}
+    $('#artist').textContent=d.author||'Chotu Saloon radio'}catch(e){}
+}
+function syncTracks(){
+  if(!yt||!ready)return;
+  try{const l=yt.getPlaylist();if(l&&l.length&&l.join()!==tracks.join()){tracks=l;fetchTitles();}
+    const i=yt.getPlaylistIndex();if(i>=0)curIdx=i}catch(e){}
+  renderSongs();renderPlaylists();
+}
+/* Try to get every song title up front (falls back to "Track n" if blocked) */
+async function fetchTitles(){
+  for(const id of tracks.slice()){
+    if(titles[id])continue;
+    try{const r=await fetch('https://www.youtube.com/oembed?format=json&url='+encodeURIComponent('https://www.youtube.com/watch?v='+id));
+      if(!r.ok)continue;titles[id]=(await r.json()).title;renderSongs()}catch(e){break}
+  }
+}
+function tick(){
+  if(!yt||!ready)return;
+  try{const t=yt.getCurrentTime()||0,d=yt.getDuration()||0;
+    $('#seek').value=d?t/d*100:0;$('#time').textContent=fmt(t)+' / '+fmt(d)}catch(e){}
+}
+
+/* ---------- YouTube IFrame API ---------- */
+function createPlayer(){
+  const vars={listType:'playlist',list:PLAYLISTS[0].id,playsinline:1,controls:0,rel:0,modestbranding:1};
+  if(location.protocol.startsWith('http'))vars.origin=location.origin;
+  yt=new YT.Player('yt',{width:200,height:200,playerVars:vars,events:{
+    onReady(){ready=true;yt.setVolume(+$('#volume').value);try{yt.setLoop(true)}catch(e){}syncTracks();renderNow();poll=setInterval(tick,500)},
+    onStateChange(e){
+      const S=YT.PlayerState;
+      if(e.data===S.PLAYING)setPlayIcon(true);
+      else if(e.data===S.PAUSED||e.data===S.CUED)setPlayIcon(false);
+      else if(e.data===S.ENDED)setPlayIcon(false);
+      syncTracks();renderNow();
+    },
+    onError(e){
+      const c=e.data;
+      if(location.protocol==='file:'||c===153)toast('YouTube blocks playback from a local file — open this page over http(s) (e.g. a hosted URL or localhost).');
+      else if(c===101||c===150||c===100){toast('That video can’t be embedded — skipping');setTimeout(()=>{try{yt.nextVideo()}catch(_){}},800)}
+      else toast('Playback error ('+c+')');
+    }}});
+}
+window.onYouTubeIframeAPIReady=createPlayer;
+const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';s.onerror=()=>toast('Could not load the YouTube player — check your connection');document.head.appendChild(s);
+
+/* ---------- Controls ---------- */
+const need=()=>{if(!yt||!ready){toast('Player is still loading…');return false}return true};
+$('#play').onclick=()=>{if(!need())return;playing?yt.pauseVideo():yt.playVideo()};
+$('#prev').onclick=()=>{if(!need())return;yt.previousVideo()};
+$('#next').onclick=()=>{if(!need())return;yt.nextVideo()};
+$('#seek').oninput=e=>{if(!need())return;const d=yt.getDuration()||0;yt.seekTo(e.target.value/100*d,true)};
+$('#volume').oninput=e=>{if(ready)yt.setVolume(+e.target.value)};
+$('#songs').onclick=e=>{const r=e.target.closest('.row');if(r&&need()){curIdx=+r.dataset.i;yt.playVideoAt(curIdx);renderSongs()}};
+$('#playlists').onclick=e=>{const r=e.target.closest('.row');if(r&&need()){const p=PLAYLISTS[+r.dataset.p];curList=+r.dataset.p;tracks=[];curIdx=0;
+  toast('Playing “'+p.name+'”');yt.loadPlaylist({listType:'playlist',list:p.id,index:0});setTimeout(syncTracks,1500);renderSongs();renderPlaylists()}};
 document.querySelectorAll('[data-open]').forEach(b=>b.onclick=e=>{e.stopPropagation();const d=$('#'+b.dataset.open),was=d.classList.contains('open');document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('open'));if(!was)d.classList.add('open')});
 document.addEventListener('click',e=>{if(!e.target.closest('.drawer'))document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('open'))});
+
+/* ---------- Install prompt (guarded: these elements may not exist) ---------- */
 let dp;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e});
 const inst=async()=>{if(dp){dp.prompt();dp=null}else toast('Open your browser menu and choose “Add to Home Screen”')};
-$('#navInstall').onclick=inst;$('#cardInstall').onclick=inst;$('#closeInstall').onclick=()=>$('#installCard').style.display='none';
-render();
+const _ni=$('#navInstall'),_ci=$('#cardInstall'),_x=$('#closeInstall');
+if(_ni)_ni.onclick=inst;if(_ci)_ci.onclick=inst;if(_x)_x.onclick=()=>{const c=$('#installCard');if(c)c.style.display='none'};
+
+$('#title').textContent='Loading playlist…';$('#artist').textContent='Chotu Saloon radio';$('#time').textContent='0:00 / 0:00';
+renderSongs();renderPlaylists();
 </script>
 </body>
 </html>
