@@ -180,7 +180,7 @@ function createPlayer(){
     onStateChange(e){
       const S=YT.PlayerState;
       if(e.data===S.PLAYING)setPlayIcon(true);
-      else if(e.data===S.PAUSED||e.data===S.CUED)setPlayIcon(false);
+      else if(e.data===S.PAUSED||e.data===S.CUED){setPlayIcon(false);if(e.data===S.CUED&&!window._userPaused){try{yt.playVideo()}catch(_){}}}
       else if(e.data===S.ENDED)setPlayIcon(false);
       syncTracks();renderNow();
     },
@@ -218,7 +218,7 @@ $('#seek').oninput=e=>{if(!need())return;const d=yt.getDuration()||0;yt.seekTo(e
 $('#volume').oninput=e=>{if(ready)yt.setVolume(+e.target.value)};
 $('#songs').onclick=e=>{const r=e.target.closest('.row');if(r&&need()){curIdx=+r.dataset.i;yt.playVideoAt(curIdx);renderSongs()}};
 $('#playlists').onclick=e=>{const r=e.target.closest('.row');if(r&&need()){const p=PLAYLISTS[+r.dataset.p];curList=+r.dataset.p;tracks=[];curIdx=0;
-  toast('Playing “'+p.name+'”');window._userPaused=false;yt.loadPlaylist({listType:'playlist',list:p.id,index:0});setTimeout(()=>{try{yt.playVideo()}catch(_){}},300);try{yt.setLoop(true)}catch(_){}setTimeout(syncTracks,1500);renderSongs();renderPlaylists()}};
+  toast('Playing “'+p.name+'”');window._userPaused=false;yt.loadPlaylist({listType:'playlist',list:p.id,index:0});try{yt.setLoop(true)}catch(_){}setTimeout(syncTracks,1500);renderSongs();renderPlaylists()}};
 document.querySelectorAll('[data-open]').forEach(b=>b.onclick=e=>{e.stopPropagation();const d=$('#'+b.dataset.open),was=d.classList.contains('open');document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('open'));if(!was)d.classList.add('open')});
 document.addEventListener('click',e=>{if(!e.target.closest('.drawer'))document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('open'))});
 
