@@ -125,6 +125,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radiu
 const $=s=>document.querySelector(s);
 /* ===== Single playlist ===== */
 const PLAYLIST_ID='PLWCVFnUjTDJI',PLAYLIST_NAME='Chotu Salon Playlist';
+const FALLBACK_VIDEO='zpBYCiBYPRo';let usedFallback=false;
 
 
 
@@ -153,7 +154,7 @@ function renderNow(){
 }
 function syncTracks(){
   if(!yt||!ready)return;
-  try{const l=yt.getPlaylist();if(l&&l.length&&l.join()!==tracks.join()){tracks=l;fetchTitles();}
+  try{const l=usedFallback?null:yt.getPlaylist();if(l&&l.length&&l.join()!==tracks.join()){tracks=l;fetchTitles();}
     const i=yt.getPlaylistIndex();if(i>=0)curIdx=i}catch(e){}
   renderSongs();
 }
@@ -187,6 +188,7 @@ function createPlayer(){
     onError(e){
       const c=e.data;
       if(location.protocol==='file:'||c===153)toast('YouTube blocks playback from a local file — open this page over http(s) (e.g. a hosted URL or localhost).');
+      else if((c===2||c===5||c===100)&&!usedFallback){usedFallback=true;tracks=[FALLBACK_VIDEO];curIdx=0;renderSongs();try{yt.loadVideoById(FALLBACK_VIDEO)}catch(_){}}
       else if(c===2||c===5)toast('This playlist couldn’t be loaded');
       else if(c===101||c===150||c===100){toast('That video can’t be embedded — skipping');setTimeout(()=>{try{yt.nextVideo()}catch(_){}},800)}
       else toast('Playback error ('+c+')');
