@@ -124,9 +124,13 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border:0;border-radiu
 <script>
 const $=s=>document.querySelector(s);
 /* ===== CONFIG: add more YouTube playlists here (just the list ID after "list=") ===== */
-const PLAYLISTS=[{name:"Chotu Saloon Playlist",id:"PLGqUOt0CNckJib_vLMdgWzmIRd2X7dG5Z"}];
+const PLAYLISTS=[
+  {name:"Chotu Saloon Playlist",id:"PLGqUOt0CNckJib_vLMdgWzmIRd2X7dG5Z"},   /* default: loads & autoplays first */
+  {name:"Playlist 2",id:"RDCLAK5uy_kiDNaS5nAXxdzsqFElFKKKs0GUEFJE26w"},
+  {name:"Playlist 3",id:"PLXuVG9D9JQ8RAhpH2TyISgBgEmXONIhGY"}
+];
 
-let yt=null,ready=false,playing=false,tracks=[],titles={},curIdx=0,curList=0,poll;
+let yt=null,ready=false,muted=false,unlockStamp=-1,playing=false,tracks=[],titles={},curIdx=0,curList=0,poll;
 const fmt=s=>{s=Math.max(0,Math.floor(s||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
 function clock(){$('#clock').textContent=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
 clock();setInterval(clock,10000);
@@ -172,7 +176,7 @@ function createPlayer(){
   const vars={listType:'playlist',list:PLAYLISTS[0].id,playsinline:1,controls:0,rel:0,modestbranding:1};
   if(location.protocol.startsWith('http'))vars.origin=location.origin;
   yt=new YT.Player('yt',{width:200,height:200,playerVars:vars,events:{
-    onReady(){ready=true;yt.setVolume(+$('#volume').value);try{yt.setLoop(true)}catch(e){}syncTracks();renderNow();poll=setInterval(tick,500)},
+    onReady(){ready=true;yt.setVolume(+$('#volume').value);try{yt.setLoop(true)}catch(e){}syncTracks();renderNow();poll=setInterval(tick,500);tryAutoplay()},
     onStateChange(e){
       const S=YT.PlayerState;
       if(e.data===S.PLAYING)setPlayIcon(true);
@@ -183,6 +187,7 @@ function createPlayer(){
     onError(e){
       const c=e.data;
       if(location.protocol==='file:'||c===153)toast('YouTube blocks playback from a local file — open this page over http(s) (e.g. a hosted URL or localhost).');
+      else if(c===2||c===5)toast('This playlist couldn’t be loaded');
       else if(c===101||c===150||c===100){toast('That video can’t be embedded — skipping');setTimeout(()=>{try{yt.nextVideo()}catch(_){}},800)}
       else toast('Playback error ('+c+')');
     }}});
@@ -190,16 +195,39 @@ function createPlayer(){
 window.onYouTubeIframeAPIReady=createPlayer;
 const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';s.onerror=()=>toast('Could not load the YouTube player — check your connection');document.head.appendChild(s);
 
+/* ---------- Autoplay ----------
+   Browsers block sound until the visitor interacts with the page. So we:
+   1) try normal autoplay, 2) if blocked, start muted (always allowed),
+   3) unmute on the visitor's first click / key press. */
+const isPlaying=()=>{try{return yt.getPlayerState()===YT.PlayerState.PLAYING}catch(e){return false}};
+function tryAutoplay(){
+  yt.playVideo();
+  setTimeout(()=>{
+    if(isPlaying())return;
+    yt.mute();muted=true;yt.playVideo();
+    setTimeout(()=>toast(isPlaying()?'Playing muted — tap anywhere for sound':'Tap anywhere to start the music'),1200);
+  },1500);
+}
+function unlockAudio(e){
+  if(!yt||!ready)return;
+  let did=false;
+  if(muted){yt.unMute();yt.setVolume(+$('#volume').value);muted=false;did=true}
+  if(!isPlaying()&&!window._userPaused){yt.playVideo();did=true}
+  if(did)unlockStamp=e.timeStamp;   /* lets the play button ignore this same click */
+}
+document.addEventListener('click',unlockAudio,true);
+document.addEventListener('keydown',unlockAudio,true);
+
 /* ---------- Controls ---------- */
 const need=()=>{if(!yt||!ready){toast('Player is still loading…');return false}return true};
-$('#play').onclick=()=>{if(!need())return;playing?yt.pauseVideo():yt.playVideo()};
+$('#play').onclick=e=>{if(!need())return;if(e.timeStamp===unlockStamp)return;if(playing){window._userPaused=true;yt.pauseVideo()}else{window._userPaused=false;yt.playVideo()}};
 $('#prev').onclick=()=>{if(!need())return;yt.previousVideo()};
 $('#next').onclick=()=>{if(!need())return;yt.nextVideo()};
 $('#seek').oninput=e=>{if(!need())return;const d=yt.getDuration()||0;yt.seekTo(e.target.value/100*d,true)};
 $('#volume').oninput=e=>{if(ready)yt.setVolume(+e.target.value)};
 $('#songs').onclick=e=>{const r=e.target.closest('.row');if(r&&need()){curIdx=+r.dataset.i;yt.playVideoAt(curIdx);renderSongs()}};
 $('#playlists').onclick=e=>{const r=e.target.closest('.row');if(r&&need()){const p=PLAYLISTS[+r.dataset.p];curList=+r.dataset.p;tracks=[];curIdx=0;
-  toast('Playing “'+p.name+'”');yt.loadPlaylist({listType:'playlist',list:p.id,index:0});setTimeout(syncTracks,1500);renderSongs();renderPlaylists()}};
+  toast('Playing “'+p.name+'”');window._userPaused=false;yt.loadPlaylist({listType:'playlist',list:p.id,index:0});try{yt.setLoop(true)}catch(_){}setTimeout(syncTracks,1500);renderSongs();renderPlaylists()}};
 document.querySelectorAll('[data-open]').forEach(b=>b.onclick=e=>{e.stopPropagation();const d=$('#'+b.dataset.open),was=d.classList.contains('open');document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('open'));if(!was)d.classList.add('open')});
 document.addEventListener('click',e=>{if(!e.target.closest('.drawer'))document.querySelectorAll('.drawer').forEach(x=>x.classList.remove('open'))});
 
